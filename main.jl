@@ -5,7 +5,7 @@ train, test = Ops.data();
 vocab = Ops.build_vocab(train)
 
 # Turn off bracket autocompletion in the REPL temporarily
-OhMyREPL.enable_autocomplete_brackets(false)
+# OhMyREPL.enable_autocomplete_brackets(false)
 
 classes = "pos", "neg"
 labels = 1:2
@@ -43,9 +43,11 @@ module M
     end
 end
 
-model = M.Model()
+model = M.Model() |> gpu
 
-const embtable = Embeddings.load_embeddings(GloVe, "/home/paul/projekte/julia/jposat/glove/glove.840B.300d.txt")
+# const embtable = Embeddings.load_embeddings(GloVe, "/home/paul/projekte/julia/jposat/glove/glove.840B.300d.txt")
+const embtable = Embeddings.load_embeddings(GloVe, "/big/f/fuchsp/posat-adapted/glove/glove.840B.300d.txt")
+
 const get_word_index = Dict(word=>ii for (ii,word) in enumerate(embtable.vocab))
 
 function get_embedding(word)
@@ -55,19 +57,20 @@ function get_embedding(word)
 end
 
 opt = ADAM()
-loss(xᵢ, yᵢ) = -log(sum(model(xᵢ) .* Flux.onehot(Dict("pos" => 1, "neg" => 2)[yᵢ], labels)))
+loss(xᵢ, yᵢ) = -log(sum(model(xᵢ) .* Flux.onehot(yᵢ, labels)))
 ps = params(model)
 
 # samples = [get_embedding(x) for x in Ops.tokenise(xᵢ) for xᵢ in shuffle(train[1:200])]
 
 tr_samples = []
 for (xᵢ, yᵢ) in shuffle(train)[1:500]
-    push!(tr_samples, ([get_embedding(x) for x in Ops.tokenise(xᵢ)], yᵢ))
+    push!(tr_samples, ([get_embedding(x) for x in Ops.tokenise(xᵢ)], Dict("pos" => 1, "neg" => 2)[yᵢ]))
 end
+tr_samples = tr_samples |> gpu
 
 Flux.testmode!(model, false)
 
-for epochᵢ in 1:5
+for epochᵢ in 1:2
     @info("Epoch $(epochᵢ)")
     batch_loss = 0.0
 
@@ -93,13 +96,20 @@ Flux.testmode!(model, true)
 
 te_samples = []
 for (xᵢ, yᵢ) in shuffle(test)[1:200]
-    push!(te_samples, ([get_embedding(x) for x in Ops.tokenise(xᵢ)], yᵢ))
+    push!(te_samples, ([get_embedding(x) for x in Ops.tokenise(xᵢ)], Dict("pos" => 1, "neg" => 2)[yᵢ]))
 end
+te_samples = te_samples |> gpu
 
 preds, gold = [], []
 for (xᵢ, yᵢ) in te_samples
-    push!(preds, Flux.onecold(model(xᵢ), classes))
+    push!(preds, Flux.onecold(model(xᵢ), labels))
     push!(gold, yᵢ)
 end
+preds = preds |> cpu
+gold = gold |> cpu
+
+@info("preds: ", length(preds), preds[1])
+@info("golds: ", length(gold), gold[1])
 
 @info("F₁: $(Ops.f₁(preds, gold))")
+
