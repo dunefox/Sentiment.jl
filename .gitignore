@@ -2,6 +2,9 @@
 # Created by https://www.gitignore.io/api/julia,emacs,python,visualstudiocode
 # Edit at https://www.gitignore.io/?templates=julia,emacs,python,visualstudiocode
 
+data/
+*.tar.gz
+
 ### Emacs ###
 # -*- mode: gitignore; -*-
 *~
