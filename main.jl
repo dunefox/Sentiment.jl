@@ -1,78 +1,63 @@
-using Flux, CSV, StatsBase, Query, Embeddings, Random, CuArrays
+using Flux, CSV, StatsBase, Query, Random
 include("ops.jl")
+include("models.jl")
 
 train, test = Ops.data();
 vocab = Ops.build_vocab(train)
 
 # Turn off bracket autocompletion in the REPL temporarily
-# OhMyREPL.enable_autocomplete_brackets(false)
+OhMyREPL.enable_autocomplete_brackets(false)
 
 classes = "pos", "neg"
 labels = 1:2
 emb_dim = 300
 hidden_dim = 50
+attn_dim = 30
+@info("Parameters ", classes, labels, emb_dim, hidden_dim, attn_dim)
 
-module M
-    using Flux
+model = Models.Standard(
+    Dense(emb_dim, hidden_dim, σ),
+    LSTM(hidden_dim, hidden_dim),
+    Dense(hidden_dim, length(labels))
+)
+@info("Model -> Standard", model)
 
-    classes = "pos", "neg"
-    labels = 1:2
-    emb_dim = 300
-    hidden_dim = 50
+# model = Models.Attention(
+#     Dense(emb_dim, hidden_dim),
+#     LSTM(hidden_dim, hidden_dim),
+#     Dense(hidden_dim, attn_dim),
+#     rand(attn_dim),
+#     Dense(hidden_dim, length(labels))
+# )
+# @info("Model -> Attention", model)
 
-    struct Model
-        dense1
-        lstm
-        dense2
-        
-        Model(
-            dense1  = Dense(emb_dim, hidden_dim, σ),
-            lstm    = LSTM(hidden_dim, hidden_dim),
-            dense2  = Dense(hidden_dim, 2)
-        ) = new(dense1, lstm, dense2)
-    end
+path = "/home/paul/projekte/julia/jposat/glove/glove.840B.300d.txt"
+# path = "/big/f/fuchsp/posat-adapted/glove/glove.840B.300d.txt"
 
-    Flux.@functor Model
-    
-    function (m::Model)(xᵢ)
-        in = m.dense1.(xᵢ)
-        h = m.lstm.(in)[end]
-        # attention layer...
-        out = m.dense2(h)
-        softmax(out)
-    end
-end
-
-model = M.Model() |> gpu
-
-# const embtable = Embeddings.load_embeddings(GloVe, "/home/paul/projekte/julia/jposat/glove/glove.840B.300d.txt")
-const embtable = Embeddings.load_embeddings(GloVe, "/big/f/fuchsp/posat-adapted/glove/glove.840B.300d.txt")
-
-const get_word_index = Dict(word=>ii for (ii,word) in enumerate(embtable.vocab))
-
-function get_embedding(word)
-    ind = get(get_word_index, word, get_word_index["unk"])
-    emb = embtable.embeddings[:,ind]
-    return emb
-end
+const emb_table = Ops.load_emb_table(path)
+const word_index = Dict(word=>ii for (ii,word) in enumerate(emb_table.vocab))
 
 opt = ADAM()
 loss(xᵢ, yᵢ) = -log(sum(model(xᵢ) .* Flux.onehot(yᵢ, labels)))
 ps = params(model)
 
-# samples = [get_embedding(x) for x in Ops.tokenise(xᵢ) for xᵢ in shuffle(train[1:200])]
+@info("Creating train set...")
+# tr_samples = []
+# for (xᵢ, yᵢ) in shuffle(train)[1:500]
+#     embs = reduce(hcat, [get_embedding(x) for x in Ops.tokenise(xᵢ)])
+#     lbl = Dict("pos" => 1, "neg" => 2)[yᵢ]
+#     push!(tr_samples, (embs, lbl))
+# end
+# tr_samples = tr_samples
 
-tr_samples = []
-for (xᵢ, yᵢ) in shuffle(train)[1:500]
-    push!(tr_samples, ([get_embedding(x) for x in Ops.tokenise(xᵢ)], Dict("pos" => 1, "neg" => 2)[yᵢ]))
-end
-tr_samples = tr_samples |> gpu
+tr_samples = Ops.create_embeddings(train, emb_table, word_index)
 
 Flux.testmode!(model, false)
 
-for epochᵢ in 1:2
-    @info("Epoch $(epochᵢ)")
-    batch_loss = 0.0
+@info("Beginning training...")
+    for epochᵢ in 1:4
+        @info("Epoch $(epochᵢ) start")
+        batch_loss = 0.0
 
     for (xᵢ, yᵢ) in tr_samples
         Flux.reset!(model)
@@ -89,27 +74,32 @@ for epochᵢ in 1:2
         Flux.update!(opt, ps, gs)
         # Here you might like to check validation set accuracy, and break out to do early stopping
     end
-    @info("Loss: $(batch_loss)")
+    @info("Epoch $(epochᵢ) end", batch_loss)
 end
 
 Flux.testmode!(model, true)
 
-te_samples = []
-for (xᵢ, yᵢ) in shuffle(test)[1:200]
-    push!(te_samples, ([get_embedding(x) for x in Ops.tokenise(xᵢ)], Dict("pos" => 1, "neg" => 2)[yᵢ]))
-end
-te_samples = te_samples |> gpu
+@info("Creating test set...")
+# te_samples = []
+# for (xᵢ, yᵢ) in shuffle(test)[1:200]
+#     embs = [get_embedding(x) for x in Ops.tokenise(xᵢ)]
+#     push!(te_samples, (, Dict("pos" => 1, "neg" => 2)[yᵢ]))
+# end
+# te_samples = te_samples
+te_samples = Ops.create_embeddings(test, emb_table, word_index, number=500)
 
+@info("Calculating F₁-Score...")
 preds, gold = [], []
 for (xᵢ, yᵢ) in te_samples
+    Flux.reset!(model)
+    println("##############")
+    println("size xᵢ: ", size(xᵢ))
+    println("Model output: ", model(xᵢ))
+    println("##############")
     push!(preds, Flux.onecold(model(xᵢ), labels))
     push!(gold, yᵢ)
 end
-preds = preds |> cpu
-gold = gold |> cpu
-
-@info("preds: ", length(preds), preds[1])
-@info("golds: ", length(gold), gold[1])
+preds = preds # |> cpu
+gold = gold # |> cpu
 
 @info("F₁: $(Ops.f₁(preds, gold))")
-
