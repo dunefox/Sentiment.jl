@@ -59,6 +59,7 @@ module Ops
 
     function create_embeddings(data, emb_table, get_word_index; number=500)
         samples = []
+        # for (xᵢ, yᵢ) in data[1:number]
         for (xᵢ, yᵢ) in shuffle(data)[1:number]
             embs = reduce(hcat, [get_embedding(x, emb_table, get_word_index) for x in tokenise(xᵢ)])
             lbl = Dict("pos" => 1, "neg" => 2)[yᵢ]

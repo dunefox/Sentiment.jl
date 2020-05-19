@@ -55,12 +55,16 @@ tr_samples = Ops.create_embeddings(train, emb_table, word_index)
 Flux.testmode!(model, false)
 
 @info("Beginning training...")
-    for epochᵢ in 1:4
-        @info("Epoch $(epochᵢ) start")
-        batch_loss = 0.0
+for epochᵢ in 1:6
+    @info("Epoch $(epochᵢ) start")
+    batch_loss = 0.0
 
-    for (xᵢ, yᵢ) in tr_samples
+    for (i, (xᵢ, yᵢ)) in enumerate(tr_samples)
         Flux.reset!(model)
+
+        if i % 50 == 0
+            println("Progress ", i * 50, "/", length(tr_samples))
+        end
 
         gs = gradient(ps) do
             training_loss = loss(xᵢ, yᵢ)
@@ -92,10 +96,10 @@ te_samples = Ops.create_embeddings(test, emb_table, word_index, number=500)
 preds, gold = [], []
 for (xᵢ, yᵢ) in te_samples
     Flux.reset!(model)
-    println("##############")
-    println("size xᵢ: ", size(xᵢ))
-    println("Model output: ", model(xᵢ))
-    println("##############")
+    # println("##############")
+    # println("size xᵢ: ", size(xᵢ))
+    # println("Model output: ", model(xᵢ))
+    # println("##############")
     push!(preds, Flux.onecold(model(xᵢ), labels))
     push!(gold, yᵢ)
 end

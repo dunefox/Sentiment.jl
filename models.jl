@@ -12,11 +12,8 @@ module Models
     Flux.@functor Standard
 
     function (m::Standard)(xᵢ)
-        println("size xᵢ: ", size(xᵢ), typeof(xᵢ))
         in  = m.dense1(xᵢ)
-        println("size in: ", size(in), typeof(in))
         hₙ   = m.lstm(in)[:, end]
-        println("size hₙ: ", size(hₙ), typeof(hₙ))
         out = m.dense2(hₙ)
         softmax(out)
     end
