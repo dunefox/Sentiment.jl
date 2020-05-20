@@ -21,7 +21,8 @@ module Models
     struct Attention
         dense1
         lstm
-        attn
+        attnᵢ
+        attn_query
         v
         dense2
     end
@@ -29,16 +30,19 @@ module Models
     @Flux.functor Attention
 
     function (attn::Attention)(xᵢ)
+        # Weight matrix for attention instead of dense layer? -> no bias
         println("size xᵢ: ", size(xᵢ), typeof(xᵢ))
         in  = attn.dense1(xᵢ)
         println("size in: ", size(in), typeof(in))
         h   = attn.lstm(in)
-        αₙ  = softmax(attn.v' * tanh.(attn.attn(h)), dims=2)
+        q   = attn.attn_query(h[:, end])
+        αₙ  = softmax(attn.v' * tanh.(attn.attnᵢ(h) .+ q), dims=2)
         println("size αₙ: ", size(αₙ), typeof(αₙ))
         println("size h: ", size(h), typeof(h))
         hₛ   = reduce(+, eachcol(αₙ .* h))
         println("size hₛ: ", size(hₛ), typeof(hₛ))
         out = attn.dense2(hₛ)
-        softmax(out, dims=2)
+        softmax(out)
     end
 end
+
