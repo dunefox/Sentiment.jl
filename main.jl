@@ -1,4 +1,4 @@
-using Flux, CSV, StatsBase, Query, Random
+using Flux, CSV, StatsBase, Query, Random, ProgressMeter
 include("ops.jl")
 include("models.jl")
 
@@ -6,7 +6,7 @@ train, test = Ops.data();
 vocab = Ops.build_vocab(train)
 
 # Turn off bracket autocompletion in the REPL temporarily
-OhMyREPL.enable_autocomplete_brackets(false)
+# OhMyREPL.enable_autocomplete_brackets(false)
 
 classes = "pos", "neg"
 labels = 1:2
@@ -19,7 +19,7 @@ model = Models.Standard(
     Dense(emb_dim, hidden_dim, σ),
     LSTM(hidden_dim, hidden_dim),
     Dense(hidden_dim, length(labels))
-)
+) 
 @info("Model -> Standard", model)
 
 # model = Models.Attention(
@@ -31,8 +31,8 @@ model = Models.Standard(
 # )
 # @info("Model -> Attention", model)
 
-path = "/home/paul/projekte/julia/jposat/glove/glove.840B.300d.txt"
-# path = "/big/f/fuchsp/posat-adapted/glove/glove.840B.300d.txt"
+# path = "/home/paul/projekte/julia/jposat/glove/glove.840B.300d.txt"
+path = "/big/f/fuchsp/posat-adapted/glove/glove.840B.300d.txt"
 
 const emb_table = Ops.load_emb_table(path)
 const word_index = Dict(word=>ii for (ii,word) in enumerate(emb_table.vocab))
@@ -50,7 +50,7 @@ ps = params(model)
 # end
 # tr_samples = tr_samples
 
-tr_samples = Ops.create_embeddings(train, emb_table, word_index)
+tr_samples = Ops.create_embeddings(train, emb_table, word_index) 
 
 Flux.testmode!(model, false)
 
@@ -59,12 +59,8 @@ for epochᵢ in 1:6
     @info("Epoch $(epochᵢ) start")
     batch_loss = 0.0
 
-    for (i, (xᵢ, yᵢ)) in enumerate(tr_samples)
+    @showprogress 5 "Epoch $(epochᵢ)" for (i, (xᵢ, yᵢ)) in enumerate(tr_samples)
         Flux.reset!(model)
-
-        if i % 50 == 0
-            println("Progress ", i * 50, "/", length(tr_samples))
-        end
 
         gs = gradient(ps) do
             training_loss = loss(xᵢ, yᵢ)
@@ -103,7 +99,6 @@ for (xᵢ, yᵢ) in te_samples
     push!(preds, Flux.onecold(model(xᵢ), labels))
     push!(gold, yᵢ)
 end
-preds = preds # |> cpu
-gold = gold # |> cpu
 
 @info("F₁: $(Ops.f₁(preds, gold))")
+
