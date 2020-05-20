@@ -36,7 +36,7 @@ module Models
         αₙ  = softmax(attn.v' * tanh.(attn.attn(h)), dims=2)
         println("size αₙ: ", size(αₙ), typeof(αₙ))
         println("size h: ", size(h), typeof(h))
-        hₛ   = αₙ .* h
+        hₛ   = reduce(+, eachcol(αₙ .* h))
         println("size hₛ: ", size(hₛ), typeof(hₛ))
         out = attn.dense2(hₛ)
         softmax(out, dims=2)
