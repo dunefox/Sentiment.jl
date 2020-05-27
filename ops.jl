@@ -7,7 +7,7 @@ module Ops
         unique(Iterators.flatten(split.([s[1] for s in set], " ", keepempty=false)))
     end
     
-    function data()
+    function data_bin()
         folder = "./data/"
         train = []
         test = []
@@ -29,6 +29,22 @@ module Ops
             end
         end
         train, test
+    end
+
+    function data_semeval()
+        path = "./data/SemEval2018/SemEval2018-Task1-all-data/English/E-c/"
+        train = "$path/2018-E-c-En-train.txt"
+        dev = "$path/2018-E-c-En-dev.txt"
+        test = "$path/2018-E-c-En-test-gold.txt"
+        train, dev, test = [], [], []
+
+        for (name, arr) in zip(["$path/2018-E-c-En-train.txt",
+            "$path/2018-E-c-En-dev.txt",
+            "$path/2018-E-c-En-test-gold.txt"], [train, dev, test])
+            open(name) do f
+                lines = split.(readlines(f)[2:end], "\t")
+            end
+        end
     end
 
     function tokenise(sentence)
@@ -59,8 +75,8 @@ module Ops
 
     function create_embeddings(data, emb_table, get_word_index; number=500)
         samples = []
-        for (xᵢ, yᵢ) in data
-            # for (xᵢ, yᵢ) in shuffle(data)[1:number]
+        # for (xᵢ, yᵢ) in data
+        for (xᵢ, yᵢ) in shuffle(data)[1:number]
             embs = reduce(hcat, [get_embedding(x, emb_table, get_word_index) for x in tokenise(xᵢ)])
             lbl = Dict("pos" => 1, "neg" => 2)[yᵢ]
             push!(samples, (embs, lbl))
@@ -78,5 +94,13 @@ module Ops
         @info("Loading embedding table...")
         embtable = Embeddings.load_embeddings(GloVe, path)
     end
-end
 
+    function eval_oov(vocab, emb_table, get_word_index)
+        count = 0
+        for vᵢ in vocab
+            count += (get(get_word_index, vᵢ, :undef) == :undef) ? 1 : 0
+        end
+        @info("Out-of-vocabulary word", count, length(vocab), count/length(vocab))
+        count/length(vocab)
+    end
+end
