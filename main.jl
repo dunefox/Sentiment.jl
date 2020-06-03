@@ -2,7 +2,7 @@ using Flux, CSV, StatsBase, Query, Random, ProgressMeter
 include("ops.jl")
 include("models.jl")
 
-train, test = Ops.data();
+train, test = Ops.data_bin();
 vocab = Ops.build_vocab(train)
 
 # Turn off bracket autocompletion in the REPL temporarily
@@ -42,6 +42,8 @@ path = "/big/f/fuchsp/posat-adapted/glove/glove.840B.300d.txt"
 const emb_table = Ops.load_emb_table(path)
 const word_index = Dict(word=>ii for (ii,word) in enumerate(emb_table.vocab))
 
+Ops.eval_oov(vocab, emb_table, word_index)
+
 opt = ADAM()
 loss(xᵢ, yᵢ) = -log(sum(model(xᵢ) .* Flux.onehot(yᵢ, labels)))
 ps = params(model)
@@ -49,12 +51,12 @@ ps = params(model)
 @info("Creating train set...")
 # tr_samples = Ops.create_embeddings(train, emb_table, word_index) 
 
-tr_batches = Flux.Data.DataLoader(Ops.create_embeddings(train, emb_table, word_index, number=8000), batchsize=400, shuffle=true)
+tr_batches = Flux.Data.DataLoader(Ops.create_embeddings(train, emb_table, word_index, 4000), batchsize=400, shuffle=true)
 
 Flux.testmode!(model, false)
 
 @info("Beginning training...")
-for epochᵢ in 1:1
+for epochᵢ in 1:3
     @info("Epoch $(epochᵢ) start")
     
     @showprogress 5 "Epoch $(epochᵢ): " for batch in tr_batches
@@ -82,10 +84,11 @@ end
 
 Flux.testmode!(model, true)
 
+size = 500
 @info("Creating test set...")
-te_samples = Ops.create_embeddings(test, emb_table, word_index, number=500) |> todevice
+te_samples = Ops.create_embeddings(test, emb_table, word_index, 500) |> todevice
 
-@info("Size of test data with " * number * " samples", sizeof(te_samples))
+@info("Size of test data with $size samples", sizeof(te_samples))
 
 @info("Calculating F₁-Score...")
 preds, gold = [], []

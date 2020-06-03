@@ -1,7 +1,11 @@
 module Ops
     export data, build_vocab, tokenise, load_emb_table, create_embeddings
 
-    using Random, Embeddings
+    using Random, Embeddings, PyCall
+
+    @info("Downloading nltk punctuation tokeniser...")
+    pyimport("nltk").download("punkt")
+    nltk_tok = pyimport("nltk.tokenize")
 
     function build_vocab(set)
         unique(Iterators.flatten(split.([s[1] for s in set], " ", keepempty=false)))
@@ -13,12 +17,12 @@ module Ops
         test = []
         for set in ["train", "test"]
             for label in ["pos", "neg"]
-                # text[set][label] = []
                 path = folder * "/" * set * "/" * label * "/"
                 for file in readdir(path)
                     open(path * file) do f
                         line = strip(read(f, String), '\n')
-                        line = tokenise(line)
+                        # line = tokenise(line)
+                        line = nltk_tok.word_tokenize(line)
                         if set == "train"
                             push!(train, (join(line, " "), label))
                         else
@@ -73,10 +77,10 @@ module Ops
         2 * prec * rec / (prec + rec)
     end
 
-    function create_embeddings(data, emb_table, get_word_index; number=500)
+    function create_embeddings(data, emb_table, get_word_index, size=500)
         samples = []
         # for (xᵢ, yᵢ) in data
-        for (xᵢ, yᵢ) in shuffle(data)[1:number]
+        for (xᵢ, yᵢ) in shuffle(data)[1:size]
             embs = reduce(hcat, [get_embedding(x, emb_table, get_word_index) for x in tokenise(xᵢ)])
             lbl = Dict("pos" => 1, "neg" => 2)[yᵢ]
             push!(samples, (embs, lbl))
